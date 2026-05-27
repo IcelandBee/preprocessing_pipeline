@@ -10,7 +10,7 @@ import yaml
 from preprocessing.pipeline.config import PipelineConfig
 from preprocessing.pipeline.context import PipelineContext
 from preprocessing.pipeline.io import copy_sample_to_archive, ensure_run_dirs, enumerate_images, write_json, write_jsonl
-from preprocessing.pipeline.operators import BatchFilterOperator
+from preprocessing.pipeline.operators import BatchFilterOperator, LabelOperator
 from preprocessing.pipeline.registry import DEFAULT_REGISTRY, OperatorRegistry
 from preprocessing.pipeline.types import OperatorResult, Sample
 
@@ -103,6 +103,68 @@ class PipelineRunner:
         summary = self._summary(manifest_rows, started_at, started, stage="filter")
         write_json(self.context.summary_path, summary)
         return summary
+
+    def run_label(self) -> dict[str, Any]:
+        started_at = datetime.now().astimezone().isoformat(timespec="seconds")
+        started = time.monotonic()
+        ensure_run_dirs(self.context.run_dir)
+        self._write_config_snapshot()
+
+        input_dir = self._label_input_dir()
+        samples = enumerate_images(
+            input_dir,
+            recursive=True,
+            image_exts=self.config.input.image_exts,
+        )
+        operator = self.registry.create(self.config.label.operator.name, self.config.label.operator.params)
+        if not isinstance(operator, LabelOperator):
+            raise TypeError(f"Configured label operator is not a LabelOperator: {self.config.label.operator.name}")
+
+        annotations: list[dict[str, Any]] = []
+        failures = 0
+        operator.setup(self.context)
+        try:
+            for sample in samples:
+                result = operator.process(sample, self.context)
+                if result.decision == "LABEL" and result.labels is not None:
+                    output = {
+                        "meta": {
+                            "operator": operator.name,
+                            "input_image": sample.source_path.name,
+                        },
+                        "annotation": result.labels,
+                    }
+                    annotation_path = self.context.annotation_dir / f"{sample.source_path.stem}.json"
+                    write_json(annotation_path, output)
+                    annotations.append(result.labels)
+                else:
+                    failures += 1
+        finally:
+            operator.teardown(self.context)
+
+        write_jsonl(self.context.labels_jsonl_path, annotations)
+        summary = {
+            "run_id": self.run_id,
+            "stage": "label",
+            "input_total": len(samples),
+            "labeled": len(annotations),
+            "failed": failures,
+            "started_at": started_at,
+            "finished_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "duration_seconds": round(time.monotonic() - started, 3),
+        }
+        write_json(self.context.run_dir / "label_summary.json", summary)
+        return summary
+
+    def run_all(self) -> dict[str, Any]:
+        filter_summary = self.run_filter()
+        label_summary = self.run_label()
+        return {"filter": filter_summary, "label": label_summary}
+
+    def _label_input_dir(self) -> Path:
+        if str(self.config.label.input_dir) == "auto":
+            return self.config.output.pass_archive_dir / self.run_id
+        return Path(self.config.label.input_dir)
 
     def _record_filter_result(self, state: dict[str, Any], operator_name: str, result: OperatorResult) -> None:
         state["operator_trace"].append(
