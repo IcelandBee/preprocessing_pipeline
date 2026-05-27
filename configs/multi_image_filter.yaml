@@ -28,8 +28,8 @@ filter:
         max_side: 1024
         sides: 3
         min_thick: 20
-        max_ratio: 0.30
-        min_std: 15.0
+        max_ratio: 0.45
+        min_std: 10.0
     - name: person_blur
       enabled: true
       params:

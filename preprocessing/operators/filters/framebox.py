@@ -14,7 +14,14 @@ from preprocessing.pipeline.types import OperatorResult, Sample
 class FrameBoxFilter(FilterOperator):
     name = "framebox"
 
-    def __init__(self, max_side: int = 1024, sides: int = 3, min_thick: int = 20, max_ratio: float = 0.30, min_std: float = 15.0) -> None:
+    def __init__(
+        self,
+        max_side: int = 1024,
+        sides: int = 3,
+        min_thick: int = 20,
+        max_ratio: float = 0.45,
+        min_std: float = 10.0,
+    ) -> None:
         self.max_side = int(max_side)
         self.sides = int(sides)
         self.min_thick = int(min_thick)
@@ -64,7 +71,7 @@ class FrameBoxFilter(FilterOperator):
         _, std = cv2.meanStdDev(gray)
         std_value = float(std[0][0])
         if std_value < self.min_std:
-            return False, "flat_image", {"std": std_value}
+            return False, "solid_color_image", {"std": std_value}
 
         top = self._border_thickness(gray, "top")
         bottom = self._border_thickness(gray, "bottom")
@@ -75,7 +82,30 @@ class FrameBoxFilter(FilterOperator):
         if top > height * self.max_ratio or bottom > height * self.max_ratio or left > width * self.max_ratio or right > width * self.max_ratio:
             return False, "likely_solid_background_too_thick", metrics
 
-        borders_found = sum([top > self.min_thick, bottom > self.min_thick, left > self.min_thick, right > self.min_thick])
+        has_top = top > self.min_thick
+        has_btm = bottom > self.min_thick
+        has_lft = left > self.min_thick
+        has_rgt = right > self.min_thick
+        borders_found = sum([has_top, has_btm, has_lft, has_rgt])
+
         if borders_found >= self.sides:
+            # Secondary check: crop center area and verify it has meaningful content
+            cy_start = top if has_top else 0
+            cy_end = height - bottom if has_btm else height
+            cx_start = left if has_lft else 0
+            cx_end = width - right if has_rgt else width
+
+            if cy_end <= cy_start or cx_end <= cx_start:
+                return False, "valid_content_too_small", metrics
+
+            center_crop = gray[cy_start:cy_end, cx_start:cx_end]
+            _, c_std = cv2.meanStdDev(center_crop)
+            c_std_value = float(c_std[0][0])
+            metrics["center_std"] = c_std_value
+
+            if c_std_value < self.min_std:
+                return False, "center_is_flat", metrics
+
             return True, "bordered_content", metrics
+
         return False, "clean", metrics

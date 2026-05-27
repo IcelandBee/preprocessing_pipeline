@@ -79,4 +79,4 @@ class DuplicateFilter(BatchFilterOperator):
     def _choose_keeper(self, a: ImageInfo, b: ImageInfo) -> tuple[ImageInfo, ImageInfo]:
         if a.size != b.size:
             return (a, b) if a.size > b.size else (b, a)
-        return (a, b) if str(a.sample.source_path) <= str(b.sample.source_path) else (b, a)
+        return (a, b) if len(str(a.sample.source_path)) <= len(str(b.sample.source_path)) else (b, a)

@@ -15,7 +15,30 @@ def make_sample(path, root):
 
 def test_framebox_filter_passes_plain_color_image(tmp_path, make_image):
     image = make_image(tmp_path / "plain.jpg", size=(80, 80), color=(120, 120, 120))
-    result = FrameBoxFilter(min_std=15.0).process(make_sample(image, tmp_path), make_context(tmp_path))
+    result = FrameBoxFilter(min_std=10.0).process(make_sample(image, tmp_path), make_context(tmp_path))
+
+    assert result.decision == "PASS"
+
+
+def test_framebox_filter_passes_bordered_image_with_flat_center(tmp_path, make_image):
+    # Image with borders but flat center: should pass (not reject)
+    import numpy as np
+    from PIL import Image as PILImage
+
+    arr = np.zeros((200, 200, 3), dtype=np.uint8)
+    # White borders (top/bottom/left/right, 30px each)
+    arr[:30, :] = 220
+    arr[-30:, :] = 220
+    arr[:, :30] = 220
+    arr[:, -30:] = 220
+    # Flat gray center
+    arr[30:170, 30:170] = 50
+
+    img_path = tmp_path / "bordered_flat.jpg"
+    PILImage.fromarray(arr).save(img_path)
+
+    sample = make_sample(img_path, tmp_path)
+    result = FrameBoxFilter(min_std=10.0, sides=3, min_thick=20).process(sample, make_context(tmp_path))
 
     assert result.decision == "PASS"
 

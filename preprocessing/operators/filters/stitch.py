@@ -68,5 +68,28 @@ class StitchLineFilterV2(FilterOperator):
         peak_idx_roi = int(np.argmax(roi))
         peak_val = float(roi[peak_idx_roi])
         peak_idx_global = peak_idx_roi + start
-        metrics = {"axis": axis, "peak_position": peak_idx_global / length, "peak_prominence": peak_val, "threshold": self.prominence}
-        return peak_val >= self.prominence, metrics
+
+        # Condition A: peak must be prominent enough
+        if peak_val < self.prominence:
+            return False, {"axis": axis, "mean": mean_val, "peak_prominence": peak_val, "threshold": self.prominence}
+
+        # Condition B: peak must be sharp (not a wide feature like a door frame)
+        center = peak_idx_global
+        left = max(0, center - 2)
+        right = min(length - 1, center + 2)
+        neighbor_mean = (float(norm[left]) + float(norm[right])) / 2.0 + 1e-5
+        sharpness_ratio = peak_val / neighbor_mean
+
+        metrics = {
+            "axis": axis,
+            "peak_position": peak_idx_global / length,
+            "peak_prominence": peak_val,
+            "threshold": self.prominence,
+            "sharpness_ratio": sharpness_ratio,
+        }
+
+        if sharpness_ratio < 2.0:
+            metrics["reason"] = "peak_wide"
+            return False, metrics
+
+        return True, metrics
