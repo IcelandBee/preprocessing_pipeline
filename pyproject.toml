@@ -28,3 +28,6 @@ preprocessing-pipeline = "preprocessing.pipeline.cli:main"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+include = ["preprocessing*"]
