@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "preprocessing-pipeline"
+version = "0.1.0"
+description = "Pluggable image preprocessing and labeling pipeline"
+requires-python = ">=3.10"
+dependencies = [
+  "PyYAML>=6.0",
+  "Pillow>=10.0",
+  "numpy>=1.24",
+  "opencv-python>=4.8",
+  "ImageHash>=4.3",
+  "tqdm>=4.66",
+  "openai>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+preprocessing-pipeline = "preprocessing.pipeline.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
