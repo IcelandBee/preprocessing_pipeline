@@ -22,4 +22,24 @@ class OperatorRegistry:
         return factory(**params)
 
 
-DEFAULT_REGISTRY = OperatorRegistry()
+def build_default_registry() -> OperatorRegistry:
+    from preprocessing.operators.filters.aspect_ratio import AspectRatioFilter
+    from preprocessing.operators.filters.blur import PersonBlurFilter
+    from preprocessing.operators.filters.compression import CompressionQualityFilter
+    from preprocessing.operators.filters.duplicate import DuplicateFilter
+    from preprocessing.operators.filters.framebox import FrameBoxFilter
+    from preprocessing.operators.filters.gray_style import GrayStyleFilter
+    from preprocessing.operators.filters.stitch import StitchLineFilterV2
+
+    registry = OperatorRegistry()
+    registry.register("aspect_ratio", AspectRatioFilter)
+    registry.register("gray_style", GrayStyleFilter)
+    registry.register("compression_quality", CompressionQualityFilter)
+    registry.register("framebox", FrameBoxFilter)
+    registry.register("stitch_v2", StitchLineFilterV2)
+    registry.register("person_blur", PersonBlurFilter)
+    registry.register("duplicate", DuplicateFilter)
+    return registry
+
+
+DEFAULT_REGISTRY = build_default_registry()
