@@ -28,7 +28,9 @@ class PipelineRunner:
     ) -> None:
         self.config = config
         self.registry = registry or DEFAULT_REGISTRY
-        self.run_id = run_id or generate_run_id()
+        prefix = self._resolve_run_id_prefix()
+        timestamp = generate_run_id()
+        self.run_id = run_id or (f"{prefix}-{timestamp}" if prefix else timestamp)
         self.context = PipelineContext(
             run_id=self.run_id,
             run_dir=self.config.output.run_root / self.run_id,
@@ -161,6 +163,12 @@ class PipelineRunner:
         label_summary = self.run_label()
         return {"filter": filter_summary, "label": label_summary}
 
+    def _resolve_run_id_prefix(self) -> str:
+        prefix = self.config.output.run_id_prefix
+        if prefix == "auto":
+            return self.config.input.input_dir.name
+        return prefix
+
     def _label_input_dir(self) -> Path:
         if str(self.config.label.input_dir) == "auto":
             return self.config.output.pass_archive_dir / self.run_id
@@ -233,6 +241,7 @@ class PipelineRunner:
                 "pass_archive_dir": str(self.config.output.pass_archive_dir),
                 "pass_archive_layout": self.config.output.pass_archive_layout,
                 "overwrite": self.config.output.overwrite,
+                "run_id_prefix": self.config.output.run_id_prefix,
             },
             "filter": {
                 "short_circuit": self.config.filter.short_circuit,

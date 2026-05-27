@@ -15,6 +15,7 @@ output:
   run_root: outputs/runs
   pass_archive_dir: /data/clean
   pass_archive_layout: run_subdir
+  run_id_prefix: auto
   overwrite: false
 filter:
   short_circuit: true

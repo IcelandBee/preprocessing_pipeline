@@ -20,6 +20,7 @@ class OutputConfig:
     pass_archive_dir: Path
     pass_archive_layout: str = "run_subdir"
     overwrite: bool = False
+    run_id_prefix: str = "auto"
 
 
 @dataclass
@@ -87,6 +88,7 @@ def parse_pipeline_config(data: dict[str, Any]) -> PipelineConfig:
         pass_archive_dir=Path(output_data["pass_archive_dir"]),
         pass_archive_layout=str(output_data.get("pass_archive_layout", "run_subdir")),
         overwrite=bool(output_data.get("overwrite", False)),
+        run_id_prefix=str(output_data.get("run_id_prefix", "auto")),
     )
     if output_config.pass_archive_layout not in {"run_subdir", "flat", "preserve_relative"}:
         raise ValueError("output.pass_archive_layout must be one of: run_subdir, flat, preserve_relative")
