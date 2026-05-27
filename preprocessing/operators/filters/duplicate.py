@@ -1,0 +1,82 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+from PIL import Image
+import imagehash
+
+from preprocessing.pipeline.context import PipelineContext
+from preprocessing.pipeline.operators import BatchFilterOperator
+from preprocessing.pipeline.types import OperatorResult, Sample
+
+
+@dataclass
+class ImageInfo:
+    sample: Sample
+    phash: imagehash.ImageHash
+    size: int
+
+
+class DuplicateFilter(BatchFilterOperator):
+    name = "duplicate"
+
+    def __init__(self, threshold: int = 9, hash_size: int = 8) -> None:
+        self.threshold = int(threshold)
+        self.hash_size = int(hash_size)
+
+    def process_batch(
+        self,
+        samples: list[Sample],
+        context: PipelineContext,
+    ) -> dict[str, OperatorResult]:
+        results: dict[str, OperatorResult] = {}
+        infos: list[ImageInfo] = []
+
+        for sample in samples:
+            try:
+                phash = self._compute_phash(sample.source_path)
+                infos.append(ImageInfo(sample=sample, phash=phash, size=sample.source_path.stat().st_size))
+            except Exception as exc:
+                results[sample.sample_id] = OperatorResult.error(f"hash_failed: {exc!r}")
+
+        kept: list[ImageInfo] = []
+        for current in infos:
+            duplicate_of: ImageInfo | None = None
+            distance = 0
+            for existing in kept:
+                distance = current.phash - existing.phash
+                if distance <= self.threshold:
+                    duplicate_of = existing
+                    break
+
+            if duplicate_of is None:
+                kept.append(current)
+                results[current.sample.sample_id] = OperatorResult.pass_({"phash": str(current.phash)})
+                continue
+
+            keeper, duplicate = self._choose_keeper(duplicate_of, current)
+            if keeper.sample.sample_id != duplicate_of.sample.sample_id:
+                kept.remove(duplicate_of)
+                kept.append(keeper)
+                results[keeper.sample.sample_id] = OperatorResult.pass_({"phash": str(keeper.phash)})
+
+            results[duplicate.sample.sample_id] = OperatorResult.reject(
+                "duplicate_image",
+                {
+                    "keeper": keeper.sample.sample_id,
+                    "hamming_distance": distance,
+                    "threshold": self.threshold,
+                },
+            )
+
+        return results
+
+    def _compute_phash(self, path: Path) -> imagehash.ImageHash:
+        with Image.open(path) as image:
+            return imagehash.phash(image.convert("RGB"), hash_size=self.hash_size)
+
+    def _choose_keeper(self, a: ImageInfo, b: ImageInfo) -> tuple[ImageInfo, ImageInfo]:
+        if a.size != b.size:
+            return (a, b) if a.size > b.size else (b, a)
+        return (a, b) if str(a.sample.source_path) <= str(b.sample.source_path) else (b, a)
