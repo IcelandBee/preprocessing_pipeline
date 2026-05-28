@@ -1,4 +1,4 @@
-#!/usr/bin bash
+#!/usr/bin/env bash
 # run_full.sh — 一次性执行筛选 + 打标全流程
 #
 # 使用场景：
@@ -16,10 +16,14 @@ set -euo pipefail
 
 CONFIG="${1:-configs/all_filters_pipeline.yaml}"
 RUN_ID="${2:-}"
+WORKERS="${3:-auto}"
 
 ARGS="--stage all --config $CONFIG"
 if [ -n "$RUN_ID" ]; then
     ARGS="$ARGS --run-id $RUN_ID"
+fi
+if [ -n "$WORKERS" ]; then
+    ARGS="$ARGS --workers $WORKERS"
 fi
 
 python -m preprocessing.pipeline.cli run $ARGS

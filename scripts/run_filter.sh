@@ -1,4 +1,4 @@
-#!/usr/bin bash
+#!/usr/bin/env bash
 # run_filter.sh — 仅执行筛选阶段
 #
 # 使用场景：
@@ -17,10 +17,14 @@ set -euo pipefail
 
 CONFIG="${1:-configs/all_filters_pipeline.yaml}"
 RUN_ID="${2:-}"
+WORKERS="${3:-auto}"
 
 ARGS="--stage filter --config $CONFIG"
 if [ -n "$RUN_ID" ]; then
     ARGS="$ARGS --run-id $RUN_ID"
+fi
+if [ -n "$WORKERS" ]; then
+    ARGS="$ARGS --workers $WORKERS"
 fi
 
 python -m preprocessing.pipeline.cli run $ARGS

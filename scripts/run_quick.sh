@@ -1,4 +1,4 @@
-#!/usr/bin bash
+#!/usr/bin/env bash
 # run_quick.sh — 快速试跑（使用小数据集和简化配置）
 #
 # 使用场景：
@@ -25,6 +25,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 CONFIG="${1:-configs/quick_test.yaml}"
 INPUT_DIR="${2:-tests/fixtures/images}"
 RUN_ID="${3:-}"
+WORKERS="${4:-auto}"
 
 # 如果配置文件不存在，自动生成一份 quick_test.yaml
 if [ ! -f "$PROJECT_DIR/$CONFIG" ]; then
@@ -43,6 +44,7 @@ output:
   overwrite: true
 
 filter:
+  workers: auto
   short_circuit: true
   operators:
     - name: aspect_ratio
@@ -75,6 +77,9 @@ sed -i "s|PLACEHOLDER|$INPUT_DIR|g" "$CONFIG"
 ARGS="--stage filter --config $CONFIG"
 if [ -n "$RUN_ID" ]; then
     ARGS="$ARGS --run-id $RUN_ID"
+fi
+if [ -n "$WORKERS" ]; then
+    ARGS="$ARGS --workers $WORKERS"
 fi
 
 python -m preprocessing.pipeline.cli run $ARGS

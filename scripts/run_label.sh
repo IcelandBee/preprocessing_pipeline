@@ -1,4 +1,4 @@
-#!/usr/bin bash
+#!/usr/bin/env bash
 # run_label.sh — 仅执行打标阶段（基于已有筛选结果）
 #
 # 使用场景：
