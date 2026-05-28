@@ -11,6 +11,7 @@ output:
   overwrite: false
 
 filter:
+  workers: auto
   short_circuit: true
   operators:
     - name: aspect_ratio
@@ -51,6 +52,7 @@ filter:
       params:
         threshold: 9
         hash_size: 8
+        window_size: 50
 
 label:
   enabled: false

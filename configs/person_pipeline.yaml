@@ -10,6 +10,7 @@ output:
   overwrite: false
 
 filter:
+  workers: auto
   short_circuit: true
   operators:
     - name: aspect_ratio
