@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import os
 import time
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
 from PIL import Image
+from tqdm import tqdm
 
 from preprocessing.pipeline.config import PipelineConfig
 from preprocessing.pipeline.context import PipelineContext
@@ -182,21 +183,23 @@ class PipelineRunner:
                     for s in samples
                 ]
                 with ProcessPoolExecutor(max_workers=workers) as pool:
-                    results = list(pool.map(_run_sample_chain, chain_args))
-                for result in results:
-                    state = states[result["sample_id"]]
-                    state["operator_trace"] = result["trace"]
-                    # PASS 的样本保持 PENDING 状态以进入 archive 循环
-                    state["status"] = result["final_decision"] if result["final_decision"] in ("REJECT", "ERROR") else "PENDING"
-                    state["rejected_by"] = result["rejected_by"]
-                    state["reject_reason"] = result["reject_reason"]
+                    futures = {pool.submit(_run_sample_chain, args): args[0] for args in chain_args}
+                    for future in tqdm(as_completed(futures), total=len(futures), desc="Filter", unit="img"):
+                        result = future.result()
+                        state = states[result["sample_id"]]
+                        state["operator_trace"] = result["trace"]
+                        state["status"] = result["final_decision"] if result["final_decision"] in ("REJECT", "ERROR") else "PENDING"
+                        state["rejected_by"] = result["rejected_by"]
+                        state["reject_reason"] = result["reject_reason"]
             else:
                 # workers=1: 退化为串行执行（保持现有行为）
                 for op in per_sample_ops:
                     active_samples = [state["sample"] for state in states.values() if state["status"] == "PENDING"]
+                    if not active_samples:
+                        continue
                     op.setup(self.context)
                     try:
-                        for sample in active_samples:
+                        for sample in tqdm(active_samples, desc=f"Filter:{op.name}", unit="img"):
                             try:
                                 result = op.process(sample, self.context)
                             except Exception as exc:
@@ -208,12 +211,15 @@ class PipelineRunner:
         # 串行尾置执行 batch operators（DuplicateFilter 等）
         for batch_op in batch_ops:
             active_samples = [state["sample"] for state in states.values() if state["status"] == "PENDING"]
+            if not active_samples:
+                continue
+            tqdm.write(f"Batch filter: {batch_op.name} on {len(active_samples)} images...")
             results = batch_op.process_batch(active_samples, self.context)
             for sample in active_samples:
                 result = results.get(sample.sample_id, OperatorResult.pass_())
                 self._record_filter_result(states[sample.sample_id], batch_op.name, result)
 
-        for state in states.values():
+        for state in tqdm(states.values(), desc="Archive", unit="img"):
             if state["status"] == "PENDING":
                 sample = state["sample"]
                 archive_path = self.context.archive_path_for(sample.relative_path)
