@@ -33,6 +33,7 @@ class OperatorConfig:
 @dataclass
 class FilterConfig:
     short_circuit: bool = True
+    workers: str | int = "auto"
     operators: list[OperatorConfig] = field(default_factory=list)
 
     @property
@@ -95,6 +96,7 @@ def parse_pipeline_config(data: dict[str, Any]) -> PipelineConfig:
 
     filter_config = FilterConfig(
         short_circuit=bool(filter_data.get("short_circuit", True)),
+        workers=filter_data.get("workers", "auto"),
         operators=[_parse_operator_config(item) for item in filter_data.get("operators", [])],
     )
 

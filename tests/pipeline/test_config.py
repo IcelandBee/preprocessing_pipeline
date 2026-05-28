@@ -52,6 +52,45 @@ label:
     assert config.label.operator.name == "person_attribute_labeler"
 
 
+def test_filter_config_workers_default(tmp_path):
+    config_path = tmp_path / "pipeline.yaml"
+    config_path.write_text(
+        """
+input:
+  input_dir: /data/raw
+output:
+  run_root: outputs/runs
+  pass_archive_dir: /data/clean
+filter:
+  short_circuit: true
+""",
+        encoding="utf-8",
+    )
+
+    config = load_pipeline_config(config_path)
+    assert config.filter.workers == "auto"
+
+
+def test_filter_config_workers_explicit(tmp_path):
+    config_path = tmp_path / "pipeline.yaml"
+    config_path.write_text(
+        """
+input:
+  input_dir: /data/raw
+output:
+  run_root: outputs/runs
+  pass_archive_dir: /data/clean
+filter:
+  short_circuit: true
+  workers: 4
+""",
+        encoding="utf-8",
+    )
+
+    config = load_pipeline_config(config_path)
+    assert config.filter.workers == 4
+
+
 def test_load_pipeline_config_rejects_missing_input(tmp_path):
     config_path = tmp_path / "bad.yaml"
     config_path.write_text(
