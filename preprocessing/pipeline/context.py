@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from PIL import Image
 
 
 @dataclass
@@ -10,6 +11,7 @@ class PipelineContext:
     run_dir: Path
     pass_archive_dir: Path
     pass_archive_layout: str = "run_subdir"
+    pil_image: Image.Image | None = None
 
     @property
     def manifest_path(self) -> Path:

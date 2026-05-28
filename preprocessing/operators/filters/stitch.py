@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
+from preprocessing.operators.filters._helpers import get_pil_image
 from preprocessing.pipeline.context import PipelineContext
 from preprocessing.pipeline.operators import FilterOperator
 from preprocessing.pipeline.types import OperatorResult, Sample
@@ -19,7 +20,7 @@ class StitchLineFilterV2(FilterOperator):
         self.prominence = float(prominence)
 
     def process(self, sample: Sample, context: PipelineContext) -> OperatorResult:
-        bgr = self._load_bgr(sample)
+        bgr = self._load_bgr(sample, context)
         if bgr is None:
             return OperatorResult.error("image_open_failed")
         bad, reason, metrics = self._detect_stitch(bgr)
@@ -27,9 +28,9 @@ class StitchLineFilterV2(FilterOperator):
             return OperatorResult.reject(reason, metrics)
         return OperatorResult.pass_(metrics)
 
-    def _load_bgr(self, sample: Sample) -> Optional[np.ndarray]:
+    def _load_bgr(self, sample: Sample, context: PipelineContext) -> Optional[np.ndarray]:
         try:
-            image = Image.open(sample.source_path).convert("RGB")
+            image = get_pil_image(sample, context).convert("RGB")
         except Exception:
             return None
         width, height = image.size

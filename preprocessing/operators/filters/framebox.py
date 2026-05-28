@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
+from preprocessing.operators.filters._helpers import get_pil_image
 from preprocessing.pipeline.context import PipelineContext
 from preprocessing.pipeline.operators import FilterOperator
 from preprocessing.pipeline.types import OperatorResult, Sample
@@ -29,7 +30,7 @@ class FrameBoxFilter(FilterOperator):
         self.min_std = float(min_std)
 
     def process(self, sample: Sample, context: PipelineContext) -> OperatorResult:
-        image = self._load_rgb_np(sample)
+        image = self._load_rgb_np(sample, context)
         if image is None:
             return OperatorResult.error("image_open_failed")
         bad, reason, metrics = self._check_image_content(image)
@@ -37,9 +38,9 @@ class FrameBoxFilter(FilterOperator):
             return OperatorResult.reject(reason, metrics)
         return OperatorResult.pass_(metrics)
 
-    def _load_rgb_np(self, sample: Sample) -> Optional[np.ndarray]:
+    def _load_rgb_np(self, sample: Sample, context: PipelineContext) -> Optional[np.ndarray]:
         try:
-            image = Image.open(sample.source_path).convert("RGB")
+            image = get_pil_image(sample, context).convert("RGB")
         except Exception:
             return None
         width, height = image.size

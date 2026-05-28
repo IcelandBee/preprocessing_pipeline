@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from PIL import Image
 
+from preprocessing.operators.filters._helpers import get_pil_image
 from preprocessing.pipeline.context import PipelineContext
 from preprocessing.pipeline.operators import FilterOperator
 from preprocessing.pipeline.types import OperatorResult, Sample
@@ -15,8 +16,8 @@ class AspectRatioFilter(FilterOperator):
 
     def process(self, sample: Sample, context: PipelineContext) -> OperatorResult:
         try:
-            with Image.open(sample.source_path) as image:
-                width, height = image.size
+            image = get_pil_image(sample, context)
+            width, height = image.size
         except Exception as exc:
             return OperatorResult.error(f"image_open_failed: {exc!r}")
 

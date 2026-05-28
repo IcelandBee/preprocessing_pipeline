@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image
 
+from preprocessing.operators.filters._helpers import get_pil_image
 from preprocessing.pipeline.context import PipelineContext
 from preprocessing.pipeline.operators import FilterOperator
 from preprocessing.pipeline.types import OperatorResult, Sample
@@ -17,7 +18,7 @@ class GrayStyleFilter(FilterOperator):
 
     def process(self, sample: Sample, context: PipelineContext) -> OperatorResult:
         try:
-            image = Image.open(sample.source_path).convert("RGB")
+            image = get_pil_image(sample, context).convert("RGB")
         except Exception as exc:
             return OperatorResult.error(f"image_open_failed: {exc!r}")
 
