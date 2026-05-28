@@ -15,15 +15,17 @@ from preprocessing.pipeline.types import OperatorResult, Sample
 class ImageInfo:
     sample: Sample
     phash: imagehash.ImageHash
+    hash_int: int
     size: int
 
 
 class DuplicateFilter(BatchFilterOperator):
     name = "duplicate"
 
-    def __init__(self, threshold: int = 9, hash_size: int = 8) -> None:
+    def __init__(self, threshold: int = 9, hash_size: int = 8, window_size: int = 50) -> None:
         self.threshold = int(threshold)
         self.hash_size = int(hash_size)
+        self.window_size = int(window_size)
 
     def process_batch(
         self,
@@ -36,15 +38,24 @@ class DuplicateFilter(BatchFilterOperator):
         for sample in samples:
             try:
                 phash = self._compute_phash(sample.source_path)
-                infos.append(ImageInfo(sample=sample, phash=phash, size=sample.source_path.stat().st_size))
+                infos.append(ImageInfo(sample=sample, phash=phash, hash_int=phash.hash, size=sample.source_path.stat().st_size))
             except Exception as exc:
                 results[sample.sample_id] = OperatorResult.error(f"hash_failed: {exc!r}")
 
+        infos.sort(key=lambda info: info.hash_int)
+
         kept: list[ImageInfo] = []
-        for current in infos:
+        for i, current in enumerate(infos):
             duplicate_of: ImageInfo | None = None
             distance = 0
-            for existing in kept:
+            window_start = max(0, i - self.window_size)
+            window_end = min(len(infos), i + self.window_size + 1)
+            for j in range(window_start, window_end):
+                if j == i:
+                    continue
+                existing = infos[j]
+                if existing not in kept:
+                    continue
                 distance = current.phash - existing.phash
                 if distance <= self.threshold:
                     duplicate_of = existing
