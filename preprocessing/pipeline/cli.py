@@ -15,7 +15,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     run_parser.add_argument("--stage", choices=["filter", "label", "all"], required=True)
     run_parser.add_argument("--config", required=True)
     run_parser.add_argument("--run-id", default=None)
-    run_parser.add_argument("--workers", default=None, type=int, help="Number of parallel workers (overrides config)")
+    run_parser.add_argument("--workers", default=None, help="Number of parallel workers, 'auto' or integer (overrides config)")
 
     return parser.parse_args(argv)
 
@@ -24,7 +24,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     config = load_pipeline_config(args.config)
     if args.workers is not None:
-        config.filter.workers = args.workers
+        try:
+            config.filter.workers = int(args.workers)
+        except ValueError:
+            config.filter.workers = args.workers
     runner = PipelineRunner(config, run_id=args.run_id)
 
     if args.stage == "filter":
