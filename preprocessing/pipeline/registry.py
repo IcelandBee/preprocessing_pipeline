@@ -31,6 +31,7 @@ def build_default_registry() -> OperatorRegistry:
     from preprocessing.operators.filters.gray_style import GrayStyleFilter
     from preprocessing.operators.filters.stitch import StitchLineFilterV2
     from preprocessing.operators.labelers.person_attribute import PersonAttributeLabeler
+    from preprocessing.operators.labelers.object_holdable import ObjectHoldableLabeler
 
     registry = OperatorRegistry()
     registry.register("aspect_ratio", AspectRatioFilter)
@@ -41,6 +42,7 @@ def build_default_registry() -> OperatorRegistry:
     registry.register("person_blur", PersonBlurFilter)
     registry.register("duplicate", DuplicateFilter)
     registry.register("person_attribute_labeler", PersonAttributeLabeler)
+    registry.register("object_holdable_labeler", ObjectHoldableLabeler)
     return registry
 
 
