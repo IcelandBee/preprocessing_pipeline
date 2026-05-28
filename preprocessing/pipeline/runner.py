@@ -1,22 +1,106 @@
 from __future__ import annotations
 
+import os
 import time
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
+from PIL import Image
 
 from preprocessing.pipeline.config import PipelineConfig
 from preprocessing.pipeline.context import PipelineContext
 from preprocessing.pipeline.io import copy_sample_to_archive, ensure_run_dirs, enumerate_images, write_json, write_jsonl
-from preprocessing.pipeline.operators import BatchFilterOperator, LabelOperator
+from preprocessing.pipeline.operators import BatchFilterOperator, FilterOperator, LabelOperator
 from preprocessing.pipeline.registry import DEFAULT_REGISTRY, OperatorRegistry
 from preprocessing.pipeline.types import OperatorResult, Sample
 
 
 def generate_run_id() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+def _resolve_workers(workers: str | int) -> int:
+    if workers == "auto":
+        return min(os.cpu_count() or 4, 8)
+    return int(workers)
+
+
+def _run_sample_chain(args: tuple) -> dict[str, Any]:
+    """在子进程中执行单个样本的完整 per-sample filter chain。
+
+    Returns pickle-safe dict with:
+        sample_id, trace, final_decision, rejected_by, reject_reason
+    """
+    sample_id, source_path_str, relative_path_str, op_configs, run_id, run_dir_str, pass_archive_dir_str, pass_archive_layout = args
+
+    from preprocessing.pipeline.registry import build_default_registry
+
+    registry = build_default_registry()
+    source_path = Path(source_path_str)
+    relative_path = Path(relative_path_str)
+
+    # 统一加载 PIL Image 一次
+    try:
+        pil_image = Image.open(source_path)
+    except Exception as exc:
+        return {
+            "sample_id": sample_id,
+            "trace": [{"name": "image_load", "decision": "ERROR", "reason": f"image_open_failed: {exc!r}", "metrics": {}}],
+            "final_decision": "ERROR",
+            "rejected_by": "image_load",
+            "reject_reason": f"image_open_failed: {exc!r}",
+        }
+
+    context = PipelineContext(
+        run_id=run_id,
+        run_dir=Path(run_dir_str),
+        pass_archive_dir=Path(pass_archive_dir_str),
+        pass_archive_layout=pass_archive_layout,
+        pil_image=pil_image,
+    )
+    sample = Sample(sample_id=sample_id, source_path=source_path, relative_path=relative_path)
+
+    trace: list[dict[str, Any]] = []
+    final_decision = "PASS"
+    rejected_by = None
+    reject_reason = None
+
+    for op_cfg in op_configs:
+        operator = registry.create(op_cfg["name"], op_cfg["params"])
+        try:
+            result = operator.process(sample, context)
+        except Exception as exc:
+            result = OperatorResult.error(f"operator_exception: {exc!r}")
+
+        trace.append({
+            "name": op_cfg["name"],
+            "decision": result.decision,
+            "reason": result.reason,
+            "metrics": result.metrics,
+        })
+
+        if result.decision in ("REJECT", "ERROR"):
+            final_decision = result.decision
+            rejected_by = op_cfg["name"]
+            reject_reason = result.reason
+            break
+
+    # 关闭共享的 PIL Image
+    try:
+        pil_image.close()
+    except Exception:
+        pass
+
+    return {
+        "sample_id": sample_id,
+        "trace": trace,
+        "final_decision": final_decision,
+        "rejected_by": rejected_by,
+        "reject_reason": reject_reason,
+    }
 
 
 class PipelineRunner:
@@ -60,33 +144,74 @@ class PipelineRunner:
             for sample in samples
         }
 
+        # 分离 per-sample 和 batch operators
         operators = [
             self.registry.create(operator_config.name, operator_config.params)
             for operator_config in self.config.filter.enabled_operators
         ]
+        per_sample_ops = [op for op in operators if isinstance(op, FilterOperator) and not isinstance(op, BatchFilterOperator)]
+        batch_ops = [op for op in operators if isinstance(op, BatchFilterOperator)]
 
-        for operator in operators:
-            active_samples = [
-                state["sample"]
-                for state in states.values()
-                if state["status"] == "PENDING"
-            ]
-            if isinstance(operator, BatchFilterOperator):
-                results = operator.process_batch(active_samples, self.context)
-                for sample in active_samples:
-                    result = results.get(sample.sample_id, OperatorResult.pass_())
-                    self._record_filter_result(states[sample.sample_id], operator.name, result)
+        # Worker 数量
+        workers = _resolve_workers(self.config.filter.workers)
+
+        # 构建 per-sample operator 配置列表（用于传给子进程）
+        per_sample_op_configs = []
+        for op_cfg in self.config.filter.enabled_operators:
+            op_instance = self.registry.create(op_cfg.name, op_cfg.params)
+            if isinstance(op_instance, FilterOperator) and not isinstance(op_instance, BatchFilterOperator):
+                per_sample_op_configs.append({"name": op_cfg.name, "params": op_cfg.params})
+
+        # 当使用自定义 registry 时退化为串行，因为子进程无法访问自定义 operator
+        use_parallel = workers > 1 and self.registry is DEFAULT_REGISTRY
+
+        # 并行或串行执行 per-sample filter chain
+        if per_sample_op_configs and len(samples) > 0:
+            if use_parallel:
+                chain_args = [
+                    (
+                        s.sample_id,
+                        str(s.source_path),
+                        s.relative_path.as_posix(),
+                        per_sample_op_configs,
+                        self.run_id,
+                        str(self.context.run_dir),
+                        str(self.context.pass_archive_dir),
+                        self.context.pass_archive_layout,
+                    )
+                    for s in samples
+                ]
+                with ProcessPoolExecutor(max_workers=workers) as pool:
+                    results = list(pool.map(_run_sample_chain, chain_args))
+                for result in results:
+                    state = states[result["sample_id"]]
+                    state["operator_trace"] = result["trace"]
+                    # PASS 的样本保持 PENDING 状态以进入 archive 循环
+                    state["status"] = result["final_decision"] if result["final_decision"] in ("REJECT", "ERROR") else "PENDING"
+                    state["rejected_by"] = result["rejected_by"]
+                    state["reject_reason"] = result["reject_reason"]
             else:
-                operator.setup(self.context)
-                try:
-                    for sample in active_samples:
-                        try:
-                            result = operator.process(sample, self.context)
-                        except Exception as exc:
-                            result = OperatorResult.error(f"operator_exception: {exc!r}")
-                        self._record_filter_result(states[sample.sample_id], operator.name, result)
-                finally:
-                    operator.teardown(self.context)
+                # workers=1: 退化为串行执行（保持现有行为）
+                for op in per_sample_ops:
+                    active_samples = [state["sample"] for state in states.values() if state["status"] == "PENDING"]
+                    op.setup(self.context)
+                    try:
+                        for sample in active_samples:
+                            try:
+                                result = op.process(sample, self.context)
+                            except Exception as exc:
+                                result = OperatorResult.error(f"operator_exception: {exc!r}")
+                            self._record_filter_result(states[sample.sample_id], op.name, result)
+                    finally:
+                        op.teardown(self.context)
+
+        # 串行尾置执行 batch operators（DuplicateFilter 等）
+        for batch_op in batch_ops:
+            active_samples = [state["sample"] for state in states.values() if state["status"] == "PENDING"]
+            results = batch_op.process_batch(active_samples, self.context)
+            for sample in active_samples:
+                result = results.get(sample.sample_id, OperatorResult.pass_())
+                self._record_filter_result(states[sample.sample_id], batch_op.name, result)
 
         for state in states.values():
             if state["status"] == "PENDING":
@@ -244,6 +369,7 @@ class PipelineRunner:
                 "run_id_prefix": self.config.output.run_id_prefix,
             },
             "filter": {
+                "workers": self.config.filter.workers,
                 "short_circuit": self.config.filter.short_circuit,
                 "operators": [
                     {"name": op.name, "enabled": op.enabled, "params": op.params}
