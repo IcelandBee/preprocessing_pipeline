@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image
+import numpy as np
 import imagehash
 
 from preprocessing.pipeline.context import PipelineContext
@@ -38,7 +39,7 @@ class DuplicateFilter(BatchFilterOperator):
         for sample in samples:
             try:
                 phash = self._compute_phash(sample.source_path)
-                infos.append(ImageInfo(sample=sample, phash=phash, hash_int=phash.hash, size=sample.source_path.stat().st_size))
+                infos.append(ImageInfo(sample=sample, phash=phash, hash_int=self._phash_to_int(phash), size=sample.source_path.stat().st_size))
             except Exception as exc:
                 results[sample.sample_id] = OperatorResult.error(f"hash_failed: {exc!r}")
 
@@ -86,6 +87,10 @@ class DuplicateFilter(BatchFilterOperator):
     def _compute_phash(self, path: Path) -> imagehash.ImageHash:
         with Image.open(path) as image:
             return imagehash.phash(image.convert("RGB"), hash_size=self.hash_size)
+
+    @staticmethod
+    def _phash_to_int(phash: imagehash.ImageHash) -> int:
+        return int.from_bytes(np.packbits(phash.hash.flatten()).tobytes(), byteorder="big")
 
     def _choose_keeper(self, a: ImageInfo, b: ImageInfo) -> tuple[ImageInfo, ImageInfo]:
         if a.size != b.size:
