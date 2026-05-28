@@ -6,6 +6,7 @@ from pathlib import Path
 from PIL import Image
 import numpy as np
 import imagehash
+from tqdm import tqdm
 
 from preprocessing.pipeline.context import PipelineContext
 from preprocessing.pipeline.operators import BatchFilterOperator
@@ -36,7 +37,7 @@ class DuplicateFilter(BatchFilterOperator):
         results: dict[str, OperatorResult] = {}
         infos: list[ImageInfo] = []
 
-        for sample in samples:
+        for sample in tqdm(samples, desc="Dedupe:phash", unit="img"):
             try:
                 phash = self._compute_phash(sample.source_path)
                 infos.append(ImageInfo(sample=sample, phash=phash, hash_int=self._phash_to_int(phash), size=sample.source_path.stat().st_size))
@@ -46,7 +47,7 @@ class DuplicateFilter(BatchFilterOperator):
         infos.sort(key=lambda info: info.hash_int)
 
         kept: list[ImageInfo] = []
-        for i, current in enumerate(infos):
+        for i, current in enumerate(tqdm(infos, desc="Dedupe:compare", unit="img")):
             duplicate_of: ImageInfo | None = None
             distance = 0
             window_start = max(0, i - self.window_size)
