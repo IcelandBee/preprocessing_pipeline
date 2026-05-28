@@ -1,4 +1,4 @@
-#!/usr/bin bash
+#!/usr/bin/env bash
 # batch_filter.sh — 批量筛选多个文件夹，每个文件夹独立运行
 #
 # 对 /mnt/DATA_71/public/data/MultiImage_Data/20260519/ 下的每个子文件夹
@@ -9,6 +9,7 @@ set -euo pipefail
 BASE_DIR="/mnt/DATA_71/public/data/MultiImage_Data/20260519"
 ANNOTATION_DIR="/mnt/DATA_71/public/data/MultiImage_Data/multi_image_data_annotation"
 PASS_DIR="/mnt/DATA_71/public/data/MultiImage_Data/multi_image_data"
+WORKERS="${WORKERS:-auto}"
 
 FOLDERS=(
     "group_photo_data"
@@ -40,7 +41,7 @@ for folder in "${FOLDERS[@]}"; do
         -e "s|^  pass_archive_dir:.*|  pass_archive_dir: $PASS_DIR|" \
         "$TEMPLATE_CONFIG" > "$temp_config"
 
-    python -m preprocessing.pipeline.cli run --stage filter --config "$temp_config"
+    python -m preprocessing.pipeline.cli run --stage filter --config "$temp_config" --workers "$WORKERS"
 
     echo "=== Done: $folder ==="
     rm "$temp_config"
