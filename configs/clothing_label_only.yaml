@@ -1,0 +1,33 @@
+input:
+  input_dir: /DATA/clean/clothing_images
+  recursive: true
+  image_exts: [".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"]
+
+output:
+  run_root: outputs/runs
+  pass_archive_dir: /DATA/clean/clothing_labeled_v1
+  pass_archive_layout: run_subdir
+  overwrite: false
+
+filter:
+  workers: 1
+  short_circuit: true
+  operators: []
+
+label:
+  enabled: true
+  input_dir: /DATA/clean/clothing_images
+  annotation_dir: auto
+  jsonl_path: auto
+  skip_existing: true
+  workers: 8
+  operator:
+    name: garment_attribute_labeler
+    params:
+      base_url: http://10.154.39.57:8001/v1
+      api_key_env: API_KEY
+      model_name: gemma-4-31B-it
+      max_retries: 3
+      max_tokens: 512
+      temperature: 0.0
+      max_pixels: 589824

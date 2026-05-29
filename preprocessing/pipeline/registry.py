@@ -32,6 +32,7 @@ def build_default_registry() -> OperatorRegistry:
     from preprocessing.operators.filters.stitch import StitchLineFilterV2
     from preprocessing.operators.labelers.person_attribute import PersonAttributeLabeler
     from preprocessing.operators.labelers.object_holdable import ObjectHoldableLabeler
+    from preprocessing.operators.labelers.garment_attribute import GarmentAttributeLabeler
 
     registry = OperatorRegistry()
     registry.register("aspect_ratio", AspectRatioFilter)
@@ -43,6 +44,7 @@ def build_default_registry() -> OperatorRegistry:
     registry.register("duplicate", DuplicateFilter)
     registry.register("person_attribute_labeler", PersonAttributeLabeler)
     registry.register("object_holdable_labeler", ObjectHoldableLabeler)
+    registry.register("garment_attribute_labeler", GarmentAttributeLabeler)
     return registry
 
 
