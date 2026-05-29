@@ -293,6 +293,7 @@ class PipelineRunner:
                         try:
                             result = future.result()
                         except Exception as exc:
+                            tqdm.write(f"[ERR] {sample.source_path.name}: worker_crashed: {exc!r}")
                             failures += 1
                             continue
                         if result.decision == "LABEL" and result.labels is not None:
@@ -307,6 +308,7 @@ class PipelineRunner:
                             write_json(annotation_path, output)
                             annotations.append(result.labels)
                         else:
+                            tqdm.write(f"[ERR] {sample.source_path.name}: {result.decision} — {result.reason}")
                             failures += 1
             else:
                 for sample in tqdm(samples, desc="Label", unit="img"):
@@ -323,6 +325,7 @@ class PipelineRunner:
                         write_json(annotation_path, output)
                         annotations.append(result.labels)
                     else:
+                        tqdm.write(f"[ERR] {sample.source_path.name}: {result.decision} — {result.reason}")
                         failures += 1
         finally:
             operator.teardown(self.context)
