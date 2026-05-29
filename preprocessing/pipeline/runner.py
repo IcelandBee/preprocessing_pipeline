@@ -185,12 +185,25 @@ class PipelineRunner:
                 with ProcessPoolExecutor(max_workers=workers) as pool:
                     futures = {pool.submit(_run_sample_chain, args): args[0] for args in chain_args}
                     for future in tqdm(as_completed(futures), total=len(futures), desc="Filter", unit="img"):
-                        result = future.result()
-                        state = states[result["sample_id"]]
-                        state["operator_trace"] = result["trace"]
-                        state["status"] = result["final_decision"] if result["final_decision"] in ("REJECT", "ERROR") else "PENDING"
-                        state["rejected_by"] = result["rejected_by"]
-                        state["reject_reason"] = result["reject_reason"]
+                        try:
+                            result = future.result()
+                            state = states[result["sample_id"]]
+                            state["operator_trace"] = result["trace"]
+                            state["status"] = result["final_decision"] if result["final_decision"] in ("REJECT", "ERROR") else "PENDING"
+                            state["rejected_by"] = result["rejected_by"]
+                            state["reject_reason"] = result["reject_reason"]
+                        except Exception as exc:
+                            sample_id = futures[future]
+                            state = states[sample_id]
+                            state["operator_trace"] = [{
+                                "name": "process_pool",
+                                "decision": "ERROR",
+                                "reason": f"worker_crashed: {exc!r}",
+                                "metrics": {},
+                            }]
+                            state["status"] = "ERROR"
+                            state["rejected_by"] = "process_pool"
+                            state["reject_reason"] = f"worker_crashed: {exc!r}"
             else:
                 # workers=1: 退化为串行执行（保持现有行为）
                 for op in per_sample_ops:
