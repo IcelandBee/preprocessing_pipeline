@@ -25,9 +25,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     config = load_pipeline_config(args.config)
     if args.workers is not None:
         try:
-            config.filter.workers = int(args.workers)
+            workers_val = int(args.workers)
         except ValueError:
-            config.filter.workers = args.workers
+            workers_val = args.workers
+        config.filter.workers = workers_val
+        config.label.workers = workers_val
     runner = PipelineRunner(config, run_id=args.run_id)
 
     if args.stage == "filter":

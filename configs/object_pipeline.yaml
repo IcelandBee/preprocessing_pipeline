@@ -37,6 +37,8 @@ label:
   input_dir: auto
   annotation_dir: auto
   jsonl_path: auto
+  skip_existing: true
+  workers: 8
   operator:
     name: object_holdable_labeler
     params:
@@ -47,4 +49,3 @@ label:
       max_tokens: 768
       temperature: 0.0
       max_pixels: 1048576
-      skip_existing: true

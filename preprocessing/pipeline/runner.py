@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -266,25 +266,64 @@ class PipelineRunner:
         if not isinstance(operator, LabelOperator):
             raise TypeError(f"Configured label operator is not a LabelOperator: {self.config.label.operator.name}")
 
+        # skip_existing: 过滤已有 annotation 的样本
+        if self.config.label.skip_existing:
+            skipped = 0
+            filtered_samples = []
+            for sample in samples:
+                annotation_path = self.context.annotation_dir / f"{sample.source_path.stem}.json"
+                if annotation_path.exists():
+                    skipped += 1
+                else:
+                    filtered_samples.append(sample)
+            if skipped:
+                tqdm.write(f"skip_existing: skipped {skipped} already-annotated images")
+            samples = filtered_samples
+
         annotations: list[dict[str, Any]] = []
         failures = 0
+        workers = _resolve_workers(self.config.label.workers)
         operator.setup(self.context)
         try:
-            for sample in samples:
-                result = operator.process(sample, self.context)
-                if result.decision == "LABEL" and result.labels is not None:
-                    output = {
-                        "meta": {
-                            "operator": operator.name,
-                            "input_image": sample.source_path.name,
-                        },
-                        "annotation": result.labels,
-                    }
-                    annotation_path = self.context.annotation_dir / f"{sample.source_path.stem}.json"
-                    write_json(annotation_path, output)
-                    annotations.append(result.labels)
-                else:
-                    failures += 1
+            if workers > 1:
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    futures = {pool.submit(operator.process, s, self.context): s for s in samples}
+                    for future in tqdm(as_completed(futures), total=len(futures), desc="Label", unit="img"):
+                        sample = futures[future]
+                        try:
+                            result = future.result()
+                        except Exception as exc:
+                            failures += 1
+                            continue
+                        if result.decision == "LABEL" and result.labels is not None:
+                            output = {
+                                "meta": {
+                                    "operator": operator.name,
+                                    "input_image": sample.source_path.name,
+                                },
+                                "annotation": result.labels,
+                            }
+                            annotation_path = self.context.annotation_dir / f"{sample.source_path.stem}.json"
+                            write_json(annotation_path, output)
+                            annotations.append(result.labels)
+                        else:
+                            failures += 1
+            else:
+                for sample in tqdm(samples, desc="Label", unit="img"):
+                    result = operator.process(sample, self.context)
+                    if result.decision == "LABEL" and result.labels is not None:
+                        output = {
+                            "meta": {
+                                "operator": operator.name,
+                                "input_image": sample.source_path.name,
+                            },
+                            "annotation": result.labels,
+                        }
+                        annotation_path = self.context.annotation_dir / f"{sample.source_path.stem}.json"
+                        write_json(annotation_path, output)
+                        annotations.append(result.labels)
+                    else:
+                        failures += 1
         finally:
             operator.teardown(self.context)
 

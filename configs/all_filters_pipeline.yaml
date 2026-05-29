@@ -58,15 +58,15 @@ label:
   input_dir: auto
   annotation_dir: auto
   jsonl_path: auto
+  skip_existing: true
+  workers: 8
   operator:
     name: person_attribute_labeler
     params:
       base_url: http://10.154.39.71:8001/v1
       api_key_env: API_KEY
       model_name: Qwen3.5-27B
-      workers: 8
       max_retries: 3
       max_tokens: 224
       temperature: 0.0
       max_pixels: 589824
-      skip_existing: true

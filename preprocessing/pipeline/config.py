@@ -47,6 +47,8 @@ class LabelConfig:
     input_dir: str | Path = "auto"
     annotation_dir: str | Path = "auto"
     jsonl_path: str | Path = "auto"
+    skip_existing: bool = False
+    workers: str | int = 1
     operator: OperatorConfig = field(default_factory=lambda: OperatorConfig(name="person_attribute_labeler"))
 
 
@@ -106,6 +108,8 @@ def parse_pipeline_config(data: dict[str, Any]) -> PipelineConfig:
         input_dir=label_data.get("input_dir", "auto"),
         annotation_dir=label_data.get("annotation_dir", "auto"),
         jsonl_path=label_data.get("jsonl_path", "auto"),
+        skip_existing=bool(label_data.get("skip_existing", False)),
+        workers=label_data.get("workers", 1),
         operator=label_operator,
     )
 
